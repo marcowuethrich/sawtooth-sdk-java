@@ -154,19 +154,26 @@ public class ArchiveHandler implements TransactionHandler {
 	 */
 	private TransactionData getUnpackedTransaction(TpProcessRequest transactionRequest)
 			throws InvalidTransactionException {
-		String payload = transactionRequest.getPayload().toStringUtf8();
-		ArrayList<String> payloadList = new ArrayList<>(Arrays.asList(payload.split(",")));
-		if (payloadList.size() != 4) {
+
+		try {
+			Map<String, String> map = this.decodePayload(transactionRequest.getPayload().toByteArray());
+			return new TransactionData(
+					map.get("refAddress"),
+					map.get("action"),
+					map.get("contentHash"),
+					map.get("dipHash")
+			);
+		} catch (CborException e) {
+			e.printStackTrace();
 			throw new InvalidTransactionException("Invalid payload serialization");
 		}
-		return new TransactionData(payloadList.get(0), payloadList.get(1), payloadList.get(2), payloadList.get(3));
 	}
 
 	/**
 	 * Helper function to generate archive record address.
 	 */
 	private String makeArchiveRecordAddress(String recordId) {
-		return xoNameSpace + recordId.substring(0, 64);
+		return xoNameSpace + recordId;
 	}
 
 	/**
