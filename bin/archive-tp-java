@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#
+#
+# ------------------------------------------------------------------------------
+
+top_dir=$(cd $(dirname $(dirname $0)) && pwd)
+cd $top_dir/examples/archive_java
+java -cp target/archive_java-1.0-SNAPSHOT.jar sawtooth.examples.xo.ArchiveTransactionProcessor $*

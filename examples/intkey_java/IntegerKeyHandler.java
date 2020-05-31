@@ -105,8 +105,7 @@ public class IntegerKeyHandler implements TransactionHandler {
    */
   public Map<String, Long> decodeState(byte[] bytes) throws CborException {
     ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-    co.nstant.in.cbor.model.Map data =
-        (co.nstant.in.cbor.model.Map) new CborDecoder(bais).decodeNext();
+    co.nstant.in.cbor.model.Map data = (co.nstant.in.cbor.model.Map) new CborDecoder(bais).decodeNext();
     DataItem[] keys = data.getKeys().toArray(new DataItem[0]);
     Map<String, Long> result = new HashMap();
     for (int i = 0; i < keys.length; i++) {
