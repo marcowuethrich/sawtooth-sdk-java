@@ -49,13 +49,13 @@ enum RecordKey {
 public class ArchiveHandler implements TransactionHandler {
 
 	private final Logger logger = Logger.getLogger(ArchiveHandler.class.getName());
-	private final String xoNameSpace;
+	private final String archiveRecordNameSpace;
 
 	/**
 	 * constructor.
 	 */
 	public ArchiveHandler() {
-		this.xoNameSpace = Utils.hash512(this.transactionFamilyName().getBytes(StandardCharsets.UTF_8)).substring(0, 6);
+		this.archiveRecordNameSpace = Utils.hash512(this.transactionFamilyName().getBytes(StandardCharsets.UTF_8)).substring(0, 6);
 	}
 
 	@Override
@@ -71,7 +71,7 @@ public class ArchiveHandler implements TransactionHandler {
 	@Override
 	public Collection<String> getNameSpaces() {
 		ArrayList<String> namespaces = new ArrayList<>();
-		namespaces.add(this.xoNameSpace);
+		namespaces.add(this.archiveRecordNameSpace);
 		return namespaces;
 	}
 
@@ -106,7 +106,8 @@ public class ArchiveHandler implements TransactionHandler {
 		// If no data has been stored yet at the given address, it will be empty.
 		byte[] stateValueRep = context.getState(Collections.singletonList(address)).get(address).toByteArray();
 		if (stateValueRep.length == 0) {
-			throw new InvalidTransactionException("No payload found on address: " + address);
+			this.logger.info("No payload found on address: " + address);
+			return new ArchiveRecord();
 		}
 		try {
 			Map<String, String> stateValue = this.decodePayload(stateValueRep);
@@ -173,7 +174,7 @@ public class ArchiveHandler implements TransactionHandler {
 	 * Helper function to generate archive record address.
 	 */
 	private String makeArchiveRecordAddress(String recordId) {
-		return xoNameSpace + recordId;
+		return archiveRecordNameSpace + recordId.substring(0, 64);
 	}
 
 	/**
@@ -249,8 +250,11 @@ public class ArchiveHandler implements TransactionHandler {
 	}
 
 	static class ArchiveRecord {
-		final String contentHash;
-		final String dipHash;
+		String contentHash;
+		String dipHash;
+
+		public ArchiveRecord() {
+		}
 
 		public ArchiveRecord(String contentHash, String dipHash) {
 			this.contentHash = contentHash;
