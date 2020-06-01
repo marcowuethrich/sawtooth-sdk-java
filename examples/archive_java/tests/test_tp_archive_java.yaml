@@ -2,7 +2,7 @@ version: "2.1"
 
 # simple test with one validator and test environments
 # to execute, run following cmd from this folder:
-# docker-compose -f test_tp_archive_java.yaml up
+# docker-compose -f prod_tp_archive_java.yaml up
 
 services:
 
