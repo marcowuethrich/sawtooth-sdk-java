@@ -38,3 +38,8 @@
 
 /docs/build/
 
+examples/archive_java/target/
+
+# runtime data
+examples/archive_java/prod/volumes/pbft-shared/
+examples/archive_java/prod/volumes/data/

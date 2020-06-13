@@ -112,16 +112,16 @@ services:
 
   # -------------=== shell ===-------------
 
-  shell:
-    image: hyperledger/sawtooth-shell
-    container_name: sawtooth-shell-default
-    volumes:
-      - pbft-shared:/pbft-shared
-    command: "bash -c \"\
-          sawtooth keygen && \
-          tail -f /dev/null \
-          \""
-    stop_signal: SIGKILL
+  #  shell:
+  #    image: hyperledger/sawtooth-shell
+  #    container_name: sawtooth-shell-default
+  #    volumes:
+  #      - pbft-shared:/pbft-shared
+  #    command: "bash -c \"\
+  #          sawtooth keygen && \
+  #          tail -f /dev/null \
+  #          \""
+  #    stop_signal: SIGKILL
 
   # -------------=== validators ===-------------
 
@@ -133,9 +133,13 @@ services:
       - 5050
       - 8800
     volumes:
-      - pbft-shared:/pbft-shared
+      - ./volumes/pbft-shared:/pbft-shared
+      - ./volumes/config/policy:/etc/sawtooth/policy
+      - ./volumes/config/validator.toml:/etc/sawtooth/validator.toml
+      - ./volumes/data/validator-0:/var/lib/sawtooth
     command: |
       bash -c "
+        # common key initialize
         if [ -e /pbft-shared/validators/validator-0.priv ]; then
           cp /pbft-shared/validators/validator-0.pub /etc/sawtooth/keys/validator.pub
           cp /pbft-shared/validators/validator-0.priv /etc/sawtooth/keys/validator.priv
@@ -146,30 +150,34 @@ services:
           cp /etc/sawtooth/keys/validator.pub /pbft-shared/validators/validator-0.pub
           cp /etc/sawtooth/keys/validator.priv /pbft-shared/validators/validator-0.priv
         fi &&
-        if [ ! -e config-genesis.batch ]; then
-          sawset genesis -k /etc/sawtooth/keys/validator.priv -o config-genesis.batch
+        # Initial genesis block logic
+        if [ ! -e /var/lib/sawtooth/block-chain-id ]; then
+          if [ ! -e config-genesis.batch ]; then
+            sawset genesis -k /etc/sawtooth/keys/validator.priv -o config-genesis.batch
+          fi &&
+          while [[ ! -f /pbft-shared/validators/validator-1.pub || \
+                   ! -f /pbft-shared/validators/validator-2.pub || \
+                   ! -f /pbft-shared/validators/validator-3.pub || \
+                   ! -f /pbft-shared/validators/validator-4.pub ]];
+          do sleep 1; done
+          echo sawtooth.consensus.pbft.members=\\['\"'$$(cat /pbft-shared/validators/validator-0.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-1.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-2.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-3.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-4.pub)'\"'\\] &&
+          if [ ! -e config.batch ]; then
+           sawset proposal create \
+              -k /etc/sawtooth/keys/validator.priv \
+              sawtooth.consensus.algorithm.name=pbft \
+              sawtooth.consensus.algorithm.version=1.0 \
+              sawtooth.consensus.pbft.members=\\['\"'$$(cat /pbft-shared/validators/validator-0.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-1.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-2.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-3.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-4.pub)'\"'\\] \
+              sawtooth.publisher.max_batches_per_block=1200 \
+              -o config.batch
+          fi &&
+          if [ ! -e /var/lib/sawtooth/genesis.batch ]; then
+            sawadm genesis config-genesis.batch config.batch
+          fi &&
+          if [ ! -e /root/.sawtooth/keys/my_key.priv ]; then
+            sawtooth keygen my_key
+          fi
         fi &&
-        while [[ ! -f /pbft-shared/validators/validator-1.pub || \
-                 ! -f /pbft-shared/validators/validator-2.pub || \
-                 ! -f /pbft-shared/validators/validator-3.pub || \
-                 ! -f /pbft-shared/validators/validator-4.pub ]];
-        do sleep 1; done
-        echo sawtooth.consensus.pbft.members=\\['\"'$$(cat /pbft-shared/validators/validator-0.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-1.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-2.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-3.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-4.pub)'\"'\\] &&
-        if [ ! -e config.batch ]; then
-         sawset proposal create \
-            -k /etc/sawtooth/keys/validator.priv \
-            sawtooth.consensus.algorithm.name=pbft \
-            sawtooth.consensus.algorithm.version=1.0 \
-            sawtooth.consensus.pbft.members=\\['\"'$$(cat /pbft-shared/validators/validator-0.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-1.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-2.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-3.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-4.pub)'\"'\\] \
-            sawtooth.publisher.max_batches_per_block=1200 \
-            -o config.batch
-        fi &&
-        if [ ! -e /var/lib/sawtooth/genesis.batch ]; then
-          sawadm genesis config-genesis.batch config.batch
-        fi &&
-        if [ ! -e /root/.sawtooth/keys/my_key.priv ]; then
-          sawtooth keygen my_key
-        fi &&
+        # startup parameters
         sawtooth-validator -vv \
           --endpoint tcp://validator-0:8800 \
           --bind component:tcp://eth0:4004 \
@@ -177,7 +185,8 @@ services:
           --bind network:tcp://eth0:8800 \
           --scheduler parallel \
           --peering static \
-          --maximum-peer-connectivity 10000
+          --maximum-peer-connectivity 10000 \
+          --network-auth challenge
       "
 
   validator-1:
@@ -190,7 +199,10 @@ services:
     depends_on:
       - validator-0
     volumes:
-      - pbft-shared:/pbft-shared
+      - ./volumes/pbft-shared:/pbft-shared
+      - ./volumes/config/policy:/etc/sawtooth/policy
+      - ./volumes/config/validator.toml:/etc/sawtooth/validator.toml
+      - ./volumes/data/validator-1:/var/lib/sawtooth
     command: |
       bash -c "
         if [ -e /pbft-shared/validators/validator-1.priv ]; then
@@ -212,7 +224,8 @@ services:
           --scheduler parallel \
           --peering static \
           --maximum-peer-connectivity 10000 \
-          --peers tcp://validator-0:8800
+          --peers tcp://validator-0:8800 \
+          --network-auth challenge
       "
 
   validator-2:
@@ -225,7 +238,10 @@ services:
     depends_on:
       - validator-0
     volumes:
-      - pbft-shared:/pbft-shared
+      - ./volumes/pbft-shared:/pbft-shared
+      - ./volumes/config/policy:/etc/sawtooth/policy
+      - ./volumes/config/validator.toml:/etc/sawtooth/validator.toml
+      - ./volumes/data/validator-2:/var/lib/sawtooth
     command: |
       bash -c "
         if [ -e /pbft-shared/validators/validator-2.priv ]; then
@@ -248,7 +264,8 @@ services:
           --peering static \
           --maximum-peer-connectivity 10000 \
           --peers tcp://validator-0:8800 \
-          --peers tcp://validator-1:8800
+          --peers tcp://validator-1:8800 \
+          --network-auth challenge
       "
 
   validator-3:
@@ -261,7 +278,10 @@ services:
     depends_on:
       - validator-0
     volumes:
-      - pbft-shared:/pbft-shared
+      - ./volumes/pbft-shared:/pbft-shared
+      - ./volumes/config/policy:/etc/sawtooth/policy
+      - ./volumes/config/validator.toml:/etc/sawtooth/validator.toml
+      - ./volumes/data/validator-3:/var/lib/sawtooth
     command: |
       bash -c "
         if [ -e /pbft-shared/validators/validator-3.priv ]; then
@@ -285,7 +305,8 @@ services:
           --maximum-peer-connectivity 10000 \
           --peers tcp://validator-0:8800 \
           --peers tcp://validator-1:8800 \
-          --peers tcp://validator-2:8800
+          --peers tcp://validator-2:8800 \
+          --network-auth challenge
       "
 
   validator-4:
@@ -298,7 +319,10 @@ services:
     depends_on:
       - validator-0
     volumes:
-      - pbft-shared:/pbft-shared
+      - ./volumes/pbft-shared:/pbft-shared
+      - ./volumes/config/policy:/etc/sawtooth/policy
+      - ./volumes/config/validator.toml:/etc/sawtooth/validator.toml
+      - ./volumes/data/validator-4:/var/lib/sawtooth
     command: |
       bash -c "
         if [ -e /pbft-shared/validators/validator-4.priv ]; then
@@ -323,7 +347,8 @@ services:
           --peers tcp://validator-0:8800 \
           --peers tcp://validator-1:8800 \
           --peers tcp://validator-2:8800 \
-          --peers tcp://validator-3:8800
+          --peers tcp://validator-3:8800 \
+          --network-auth challenge
       "
   # -------------=== pbft engines ===-------------
 
